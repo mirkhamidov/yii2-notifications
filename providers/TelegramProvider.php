@@ -3,15 +3,31 @@
 namespace mirkhamidov\notifications\providers;
 
 
-use function get_class;
 use mirkhamidov\notifications\models\NotificationsModel;
 use mirkhamidov\telegramBot\TelegramBot;
+use stdClass;
 use Yii;
 use yii\base\BaseObject;
 
 class TelegramProvider extends BaseObject implements iProvider
 {
     const ID = 'telegram';
+
+    /** @var string The way how to bind document to message if message exists */
+    const FILE_MESSAGE_MERGE_TYPE_AS_REPLY = 'reply'; // as a reply to message
+    const FILE_MESSAGE_MERGE_TYPE_AS_NO_MERGE = 'no'; // as a different message
+
+    /** @var string Document types */
+    const FILE_TYPE_DOCUMENT = 'document';
+    const FILE_TYPE_PHOTO = 'photo';
+    const FILE_TYPE_AUDIO = 'audio';
+    const FILE_TYPE_VIDEO = 'video';
+
+    /** @var string Default the wat of binding the document to message */
+    public $fileAndMessageMergeType = self::FILE_MESSAGE_MERGE_TYPE_AS_NO_MERGE;
+
+    /** @var string Default Sending file Type */
+    public $fileType = self::FILE_TYPE_DOCUMENT;
 
     /**
      * Configurations for mirkhamidov/yii2-bot-telegram
@@ -29,16 +45,150 @@ class TelegramProvider extends BaseObject implements iProvider
      */
     private $_tgBot;
 
+    /**
+     * @var stdClass Last response of sent message
+     */
+    private $lastMessageResponse;
+
+    /**
+     * @var bool default=false, if needed to send only one file
+     */
+    private $withoutMessage = false;
+
     /** @inheritdoc */
     public function send(NotificationsModel $model)
     {
+        $this->log('Telegram message sending processing');
+
         $model->status = NotificationsModel::STATUS_PROCESSING;
         $model->update(false);
-        $res = $this->getTgBot()->sendMessage($model->message, $model->params['providerParams']['chat_id']);
-        $model->response = $res;
+
+        if (!empty($model->message)) {
+            $this->lastMessageResponse = $this->getTgBot()->sendMessage($model->message, $model->params['providerParams']['chat_id']);
+        }
+
+        if (empty($model->message) && !empty($model->params['providerParams']['file'])) {
+            /** will be send only file */
+            $this->log('Only file will be sent');
+            $this->withoutMessage = true;
+        }
+
+        if (!empty($model->params['providerParams']['file'])) {
+            $this->log('Has file, sending...');
+            $fileResult = $this->sendFile($model);
+
+            /** ERROR */
+            if ($fileResult === false && $this->withoutMessage === true) {
+                $model->status = NotificationsModel::STATUS_FAIL;
+                $model->last_message = 'Nothing to send, see logs';
+                $model->update(false);
+                $this->log('HALT -> Nothing to send (no file and no message', 'error');
+                return true;
+            }
+        }
+
+        /** ERROR */
+        if (empty($this->lastMessageResponse)) {
+            $model->status = NotificationsModel::STATUS_FAIL;
+            $model->last_message = 'Something went wrong, no response data detected';
+            $model->update(false);
+            $this->log('HALT -> Something went wrong, no response data detected', 'error');
+            return true;
+        }
+
+        $model->response = $this->lastMessageResponse;
         $model->status = NotificationsModel::STATUS_SUCCESS;
         $model->update(false);
+
+        $this->log('Telegram message sending finished');
+
         return true;
+    }
+
+    /**
+     * Sending file via Telegram API
+     * @param NotificationsModel $model
+     * @return bool
+     * @throws \yii\base\InvalidConfigException
+     */
+    private function sendFile(NotificationsModel $model)
+    {
+        if (!is_file($model->params['providerParams']['file'])
+            || (!empty($this->lastMessageResponse) && $this->lastMessageResponse->ok != true)
+        ) {
+            return false;
+        }
+        /** default params */
+        $_documentParams = [];
+
+
+        /** Merge params */
+        if (!empty($model->params['providerParams']['fileParams'])
+            && is_array($model->params['providerParams']['fileParams'])
+        ) {
+            $_documentParams = array_merge($_documentParams, $model->params['providerParams']['fileParams']);
+        }
+
+        if (!empty($_documentParams['fileType'])) {
+            $this->fileType = $_documentParams['fileType'];
+        }
+        if (!empty($_documentParams['messageMergeType'])) {
+            $this->fileAndMessageMergeType = $_documentParams['messageMergeType'];
+            unset($_documentParams['messageMergeType']);
+        }
+
+        /** if reply needed */
+        if (!$this->withoutMessage
+            && $this->fileAndMessageMergeType == self::FILE_MESSAGE_MERGE_TYPE_AS_REPLY
+            && !empty($this->lastMessageResponse->result->message_id)
+        ) {
+            $_documentParams['reply_to_message_id'] = $this->lastMessageResponse->result->message_id;
+        }
+
+
+
+        switch ($this->fileType) {
+            case self::FILE_TYPE_AUDIO:
+                $_documentParams['audio'] = $model->params['providerParams']['file'];
+                $_documentParams['chat_id'] = $model->params['providerParams']['chat_id'];
+                $res = $this->getTgBot()->sendAudio($_documentParams);
+                break;
+            case self::FILE_TYPE_PHOTO:
+                $res = $this->getTgBot()->sendPhoto(
+                    $model->params['providerParams']['file'],
+                    $model->params['providerParams']['chat_id'],
+                    $_documentParams);
+                break;
+            case self::FILE_TYPE_VIDEO:
+                $_documentParams['video'] = $model->params['providerParams']['file'];
+                $_documentParams['chat_id'] = $model->params['providerParams']['chat_id'];
+                $res = $this->getTgBot()->sendVideo($_documentParams);
+                break;
+            case self::FILE_TYPE_DOCUMENT:
+            default:
+                $_documentParams['document'] = $model->params['providerParams']['file'];
+                $_documentParams['chat_id'] = $model->params['providerParams']['chat_id'];
+                $res = $this->getTgBot()->sendDocument($_documentParams);
+                break;
+        }
+
+
+        if (empty($this->lastMessageResponse)) {
+            $this->lastMessageResponse = $res;
+        } else {
+            $this->lastMessageResponse = ['mgs' => $this->lastMessageResponse, 'file' => $res];
+        }
+        return true;
+    }
+
+    /**
+     * Logging
+     * @param $data
+     * @param string $type
+     */
+    private function log($data, $type = 'info')
+    {
+        Yii::$type($data, __CLASS__);
     }
 
     /**
