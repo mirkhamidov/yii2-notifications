@@ -29,6 +29,10 @@ class TelegramProvider extends BaseObject implements iProvider
     /** @var string Default Sending file Type */
     public $fileType = self::FILE_TYPE_DOCUMENT;
 
+    public $chat_id;
+    public $file;
+    public $fileParams;
+
     /**
      * Configurations for mirkhamidov/yii2-bot-telegram
      * @var array
@@ -64,16 +68,16 @@ class TelegramProvider extends BaseObject implements iProvider
         $model->update(false);
 
         if (!empty($model->message)) {
-            $this->lastMessageResponse = $this->getTgBot()->sendMessage($model->message, $model->params['providerParams']['chat_id']);
+            $this->lastMessageResponse = $this->getTgBot()->sendMessage($model->message, $this->chat_id);
         }
 
-        if (empty($model->message) && !empty($model->params['providerParams']['file'])) {
+        if (empty($model->message) && !empty($this->file)) {
             /** will be send only file */
             $this->log('Only file will be sent');
             $this->withoutMessage = true;
         }
 
-        if (!empty($model->params['providerParams']['file'])) {
+        if (!empty($this->file)) {
             $this->log('Has file, sending...');
             $fileResult = $this->sendFile($model);
 
@@ -113,7 +117,7 @@ class TelegramProvider extends BaseObject implements iProvider
      */
     private function sendFile(NotificationsModel $model)
     {
-        if (!is_file($model->params['providerParams']['file'])
+        if (!is_file($this->file)
             || (!empty($this->lastMessageResponse) && $this->lastMessageResponse->ok != true)
         ) {
             return false;
@@ -123,10 +127,10 @@ class TelegramProvider extends BaseObject implements iProvider
 
 
         /** Merge params */
-        if (!empty($model->params['providerParams']['fileParams'])
-            && is_array($model->params['providerParams']['fileParams'])
+        if (!empty($this->fileParams)
+            && is_array($this->fileParams)
         ) {
-            $_documentParams = array_merge($_documentParams, $model->params['providerParams']['fileParams']);
+            $_documentParams = array_merge($_documentParams, $this->fileParams);
         }
 
         if (!empty($_documentParams['fileType'])) {
@@ -149,25 +153,25 @@ class TelegramProvider extends BaseObject implements iProvider
 
         switch ($this->fileType) {
             case self::FILE_TYPE_AUDIO:
-                $_documentParams['audio'] = $model->params['providerParams']['file'];
-                $_documentParams['chat_id'] = $model->params['providerParams']['chat_id'];
+                $_documentParams['audio'] = $this->file;
+                $_documentParams['chat_id'] = $this->chat_id;
                 $res = $this->getTgBot()->sendAudio($_documentParams);
                 break;
             case self::FILE_TYPE_PHOTO:
                 $res = $this->getTgBot()->sendPhoto(
-                    $model->params['providerParams']['file'],
-                    $model->params['providerParams']['chat_id'],
+                    $this->file,
+                    $this->chat_id,
                     $_documentParams);
                 break;
             case self::FILE_TYPE_VIDEO:
-                $_documentParams['video'] = $model->params['providerParams']['file'];
-                $_documentParams['chat_id'] = $model->params['providerParams']['chat_id'];
+                $_documentParams['video'] = $this->file;
+                $_documentParams['chat_id'] = $this->chat_id;
                 $res = $this->getTgBot()->sendVideo($_documentParams);
                 break;
             case self::FILE_TYPE_DOCUMENT:
             default:
-                $_documentParams['document'] = $model->params['providerParams']['file'];
-                $_documentParams['chat_id'] = $model->params['providerParams']['chat_id'];
+                $_documentParams['document'] = $this->file;
+                $_documentParams['chat_id'] = $this->chat_id;
                 $res = $this->getTgBot()->sendDocument($_documentParams);
                 break;
         }

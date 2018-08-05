@@ -5,6 +5,7 @@ namespace mirkhamidov\notifications;
 use function get_class;
 use mirkhamidov\notifications\models\NotificationsModel;
 use mirkhamidov\notifications\providers\iProvider;
+use mirkhamidov\notifications\providers\MailerProvider;
 use mirkhamidov\notifications\tasks\QueueNotificationTask;
 use Yii;
 use yii\base\Component;
@@ -44,6 +45,20 @@ class Notifications extends Component
     }
 
     /**
+     * Shortcut for send() to send template emails
+     * @param array $params
+     * @param string $type
+     * @throws InvalidConfigException
+     * @throws \Throwable
+     * @throws \yii\db\StaleObjectException
+     */
+    public function sendTemplateMail(array $params, string $type = MailerProvider::ID, array $moreParams = [])
+    {
+        $_params = ArrayHelper::merge(['providerParams' => $params], $moreParams);
+        $this->send(null, $type, $_params);
+    }
+
+    /**
      *
      * Example for params!
      *  [
@@ -58,6 +73,8 @@ class Notifications extends Component
      * @param array $params see explanation above
      * @return mixed|true true=success
      * @throws InvalidConfigException
+     * @throws \Throwable
+     * @throws \yii\db\StaleObjectException
      */
     public function send($message, string $type, array $params = [])
     {

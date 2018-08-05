@@ -6,6 +6,61 @@
 * slack notifications
 * email notifications
 
+
+# Notification providers
+
+## Telegram
+
+description see below, in examples
+
+## Default Yii2 Mailer
+
+configure in main config file `main.php`
+````
+return [
+    'modules' => [
+        ...
+        'notifications' => [
+            'class' => mirkhamidov\notifications\Module::class,
+            'queueIn' => 'queueNotifications',
+            'providers' => [
+                ...
+                'default-mailer' => [
+                    'class' => MailerProvider::class,
+                    'from' => [{SENDER EMAIL} => {SENDER NAME}],
+                ],
+            ],
+        ],
+    ],
+];
+````
+
+send using view file and view params
+````
+Yii::$app->notifications->sendTemplateMail([
+    'to' => {RECEPIENT EMAIL},
+    'subject' => {SUBJECT},
+    'view' => ['html' => {HTML VIEW}, 'text' => {TEXT VIEW}],
+    'params' => [
+        {KEY-VALUE params for views}
+    ],
+]);
+````
+
+or already rendered/prepared text and other params
+````
+Yii::$app->notifications->sendTemplateMail([
+    'to' => {RECEPIENT EMAIL},
+    'subject' => 'Test messages fo ' . rand(1, 99999),
+    'htmlBody' => $msg,
+    ['textBody' => $msg,]
+    ['cc' => {CC},]
+    ['bcc' => {BCC},]
+    ['replyTo' => {REPLY TO EMAIL},]
+    ['attachFilePath' => {PATH TO FILE TO ATTACH},]
+]);
+````
+
 # Configuration
 
 in main app config file
@@ -72,7 +127,7 @@ In app config file
 
 # Examples
 
-## Send message
+## Telegram Send message
 
 ```
 use mirkhamidov\notifications\providers\TelegramProvider;
@@ -88,7 +143,7 @@ $msg = 'any message';
 More `providerParams` look at [Telegram SendMessage API](https://core.telegram.org/bots/api#sendmessage)
 
 
-## Message with file
+## Telegram Message with file
 
 ````
 use mirkhamidov\notifications\providers\TelegramProvider;

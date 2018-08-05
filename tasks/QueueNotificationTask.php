@@ -37,8 +37,14 @@ class QueueNotificationTask extends BaseObject implements RetryableJobInterface
         }
 
         $providerName = $this->notificationModel->params['providerType'];
+        $providerParams = [];
+        if (!empty($this->notificationModel->params['providerParams'])
+            && is_array($this->notificationModel->params['providerParams'])
+        ) {
+            $providerParams = $this->notificationModel->params['providerParams'];
+        }
         /** @var iProvider|TelegramProvider $provider */
-        $provider = $this->getModule()->getProvider($providerName);
+        $provider = $this->getModule()->getProvider($providerName, $providerParams);
 
         $provider->send($this->notificationModel);
 
