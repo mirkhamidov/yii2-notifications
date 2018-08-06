@@ -56,73 +56,81 @@ class MailerProvider extends BaseObject implements iProvider
         $model->status = NotificationsModel::STATUS_PROCESSING;
         $model->update(false);
 
-        $this->message = $this->mailer->compose($this->view, $this->params);
+        try {
+            $this->message = $this->mailer->compose($this->view, $this->params);
 
-        if (!empty($this->from)
-            && !empty($this->to)
-        ) {
-            $this->maySend = true;
-        } else {
-            if (empty($this->from)) {
-                $this->log('"from" data is empty', 'error');
-            }
-            if (empty($this->to)) {
-                $this->log('"to" data is empty', 'error');
-            }
-        }
-
-        if ($this->maySend === true) {
-
-            if ($this->charset !== null) {
-                $this->message->setCharset($this->charset);
-            }
-            if ($this->from !== null) {
-                $this->message->setFrom($this->from);
-            }
-            if ($this->replyTo !== null) {
-                $this->message->setReplyTo($this->replyTo);
-            }
-            if ($this->to !== null) {
-                $this->message->setTo($this->to);
-            }
-            if ($this->cc !== null) {
-                $this->message->setCc($this->cc);
-            }
-            if ($this->bcc !== null) {
-                $this->message->setBcc($this->bcc);
-            }
-            if ($this->subject !== null) {
-                $this->message->setSubject($this->subject);
-            }
-            if ($this->textBody !== null) {
-                $this->message->setTextBody($this->textBody);
-            }
-            if ($this->htmlBody !== null) {
-                $this->message->setHtmlBody($this->htmlBody);
+            if (!empty($this->from)
+                && !empty($this->to)
+            ) {
+                $this->maySend = true;
+            } else {
+                if (empty($this->from)) {
+                    $this->log('"from" data is empty', 'error');
+                }
+                if (empty($this->to)) {
+                    $this->log('"to" data is empty', 'error');
+                }
             }
 
-            if ($this->attachFilePath !== null) {
-                $this->message->attach($this->attachFilePath, $this->attachOptions);
+            if ($this->maySend === true) {
+
+                if ($this->charset !== null) {
+                    $this->message->setCharset($this->charset);
+                }
+                if ($this->from !== null) {
+                    $this->message->setFrom($this->from);
+                }
+                if ($this->replyTo !== null) {
+                    $this->message->setReplyTo($this->replyTo);
+                }
+                if ($this->to !== null) {
+                    $this->message->setTo($this->to);
+                }
+                if ($this->cc !== null) {
+                    $this->message->setCc($this->cc);
+                }
+                if ($this->bcc !== null) {
+                    $this->message->setBcc($this->bcc);
+                }
+                if ($this->subject !== null) {
+                    $this->message->setSubject($this->subject);
+                }
+                if ($this->textBody !== null) {
+                    $this->message->setTextBody($this->textBody);
+                }
+                if ($this->htmlBody !== null) {
+                    $this->message->setHtmlBody($this->htmlBody);
+                }
+
+                if ($this->attachFilePath !== null) {
+                    $this->message->attach($this->attachFilePath, $this->attachOptions);
+                }
+
+
+                $this->message->send();
+                $this->log('Message send');
+                $model->status = NotificationsModel::STATUS_SUCCESS;
             }
 
+            if ($this->maySend === false) {
+                $this->log('Nothing to send, not enough data');
+                $model->status = NotificationsModel::STATUS_FAIL;
+                $model->last_message = 'Nothing to send, not enough data';
+            }
 
-            $this->message->send();
-            $this->log('Message send');
-            $model->status = NotificationsModel::STATUS_SUCCESS;
-        }
+            if (!$this->maySend && empty($model->last_message)) {
+                $model->status = NotificationsModel::STATUS_FAIL;
+                $model->last_message = 'Something went wrong';
+            }
 
-        if ($this->maySend === false) {
-            $this->log('Nothing to send, not enough data');
+            $model->update(false);
+        } catch (\Exception $e) {
+            $this->log('Exception: ' . $e->getMessage() . "\nTrace:\n" . $e->getTraceAsString(), 'error');
             $model->status = NotificationsModel::STATUS_FAIL;
-            $model->last_message = 'Nothing to send, not enough data';
+            $model->last_message = $e->getMessage();
+            $model->update(false);
+            return false;
         }
-
-        if (!$this->maySend && empty($model->last_message)) {
-            $model->status = NotificationsModel::STATUS_FAIL;
-            $model->last_message = 'Something went wrong';
-        }
-
-        $model->update(false);
 
         return true;
     }

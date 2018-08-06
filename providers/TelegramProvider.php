@@ -67,44 +67,53 @@ class TelegramProvider extends BaseObject implements iProvider
         $model->status = NotificationsModel::STATUS_PROCESSING;
         $model->update(false);
 
-        if (!empty($model->message)) {
-            $this->lastMessageResponse = $this->getTgBot()->sendMessage($model->message, $this->chat_id);
-        }
+        try {
 
-        if (empty($model->message) && !empty($this->file)) {
-            /** will be send only file */
-            $this->log('Only file will be sent');
-            $this->withoutMessage = true;
-        }
+            if (!empty($model->message)) {
+                $this->lastMessageResponse = $this->getTgBot()->sendMessage($model->message, $this->chat_id);
+            }
 
-        if (!empty($this->file)) {
-            $this->log('Has file, sending...');
-            $fileResult = $this->sendFile($model);
+            if (empty($model->message) && !empty($this->file)) {
+                /** will be send only file */
+                $this->log('Only file will be sent');
+                $this->withoutMessage = true;
+            }
+
+            if (!empty($this->file)) {
+                $this->log('Has file, sending...');
+                $fileResult = $this->sendFile($model);
+
+                /** ERROR */
+                if ($fileResult === false && $this->withoutMessage === true) {
+                    $model->status = NotificationsModel::STATUS_FAIL;
+                    $model->last_message = 'Nothing to send, see logs';
+                    $model->update(false);
+                    $this->log('HALT -> Nothing to send (no file and no message', 'error');
+                    return true;
+                }
+            }
 
             /** ERROR */
-            if ($fileResult === false && $this->withoutMessage === true) {
+            if (empty($this->lastMessageResponse)) {
                 $model->status = NotificationsModel::STATUS_FAIL;
-                $model->last_message = 'Nothing to send, see logs';
+                $model->last_message = 'Something went wrong, no response data detected';
                 $model->update(false);
-                $this->log('HALT -> Nothing to send (no file and no message', 'error');
+                $this->log('HALT -> Something went wrong, no response data detected', 'error');
                 return true;
             }
-        }
 
-        /** ERROR */
-        if (empty($this->lastMessageResponse)) {
-            $model->status = NotificationsModel::STATUS_FAIL;
-            $model->last_message = 'Something went wrong, no response data detected';
+            $model->response = $this->lastMessageResponse;
+            $model->status = NotificationsModel::STATUS_SUCCESS;
             $model->update(false);
-            $this->log('HALT -> Something went wrong, no response data detected', 'error');
-            return true;
+
+            $this->log('Telegram message sending finished');
+        } catch (\Exception $e) {
+            $this->log('Exception: ' . $e->getMessage() . "\nTrace:\n" . $e->getTraceAsString(), 'error');
+            $model->status = NotificationsModel::STATUS_FAIL;
+            $model->last_message = $e->getMessage();
+            $model->update(false);
+            return false;
         }
-
-        $model->response = $this->lastMessageResponse;
-        $model->status = NotificationsModel::STATUS_SUCCESS;
-        $model->update(false);
-
-        $this->log('Telegram message sending finished');
 
         return true;
     }
